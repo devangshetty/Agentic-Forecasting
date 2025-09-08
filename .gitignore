@@ -1,0 +1,50 @@
+# Ruby
+/.bundle
+/vendor/bundle
+/*.gem
+*.rbc
+.bundle/
+Gemfile.lock
+
+# Python venv
+.venv/
+__pycache__/
+*.pyc
+
+# Docker
+docker-compose.override.yml
+**/tmp
+**/log/*
+*.env
+
+# OS
+.DS_Store
+.idea/
+.vscode/
+
+# Secrets
+.env
+.env
+output/
+# Local env + secrets
+.env
+
+# Ruby
+/.bundle
+/vendor/bundle
+/.ruby-version
+Gemfile.lock
+
+# Python venv & caches
+.venv/
+__pycache__/
+*.pyc
+
+# outputs / logs
+output/
+*.log
+
+# macOS / IDE
+.DS_Store
+.vscode/
+.idea/

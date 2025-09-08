@@ -1,0 +1,34 @@
+version: "3.8"
+services:
+  forecast_service:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: forecast_service
+    restart: unless-stopped
+    volumes:
+      - ./:/app:cached
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8000:8000"
+
+  ruby_app:
+    build:
+      context: .
+      dockerfile: Dockerfile.ruby
+    container_name: ruby_orchestrator
+    depends_on:
+      - forecast_service
+    volumes:
+      - ./:/app:cached
+    environment:
+      - DATA_PATH=/app/stores_sales_forecasting.pandas.csv
+      - OUT_DIR=/app/output
+      - LAGS=${LAGS:-14}
+      - MODEL_N_ESTIMATORS=${MODEL_N_ESTIMATORS:-200}
+      - MODEL_MAX_DEPTH=${MODEL_MAX_DEPTH:-8}
+      - TRAIN_FRAC=${TRAIN_FRAC:-0.8}
+      - ARIMA_URL=http://forecast_service:8000/arima
+      # OPENAI_API_KEY left unset by default; set in .env or via CLI
+    command: ["bash", "-lc", "while true; do sleep 3600; done"]  # keep container alive for exec
