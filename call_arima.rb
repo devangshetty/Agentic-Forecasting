@@ -1,25 +1,33 @@
 #!/usr/bin/env ruby
 # call_arima.rb
+# POST to FastAPI ARIMA service and insert returned forecast into DB (table 'forecasts').
+
 require 'net/http'
 require 'uri'
 require 'json'
 require 'csv'
 require 'fileutils'
+require 'sequel'
+require 'date'
 
-SERVICE_URL = ENV['ARIMA_URL'] || "http://127.0.0.1:8000/arima"
-CSV_PATH = ENV['DATA_PATH'] || File.join(Dir.home, "Desktop", "Ruby", "forecast_project", "stores_sales_forecasting.pandas.csv")
 OUT_DIR = ENV['OUT_DIR'] || "output"
 FileUtils.mkdir_p(OUT_DIR)
 
-# Request payload
+SERVICE_URL = ENV['ARIMA_URL'] || "http://127.0.0.1:8000/arima"
+CSV_PATH = ENV['DATA_PATH'] || File.join(Dir.home, "Desktop", "Ruby", "forecast_project", "stores_sales_forecasting.pandas.csv")
+
+DB_URL = ENV['DATABASE_URL'] || "postgres://#{ENV['POSTGRES_USER'] || 'postgres'}:#{ENV['POSTGRES_PASSWORD'] || 'postgres_password'}@#{ENV['DB_HOST'] || 'db'}:5432/#{ENV['POSTGRES_DB'] || 'forecast_db'}"
+DB = Sequel.connect(DB_URL) rescue nil
+
 payload = {
   csv_path: CSV_PATH,
   date_col: ENV['DATE_COL'] || "Order Date",
   sales_col: ENV['SALES_COL'] || "Sales",
   periods: (ENV['PERIODS'] || 30).to_i,
   freq: ENV['FREQ'] || "D",
-  order: nil, # e.g. [1,1,1] or nil for default
-  seasonal_order: nil
+  order: nil,
+  seasonal_order: nil,
+  use_db: (ENV['USE_DB'] == '1' ? true : false)
 }
 
 uri = URI.parse(SERVICE_URL)
@@ -40,19 +48,36 @@ if result['error']
   exit 1
 end
 
-forecast = result['forecast']  # array of {date, mean, lower_ci, upper_ci}
-history = result['history_tail']
+forecast = result['forecast'] || []
+history = result['history_tail'] || []
 
-# Save forecast CSV
+# Save CSV for convenience
 CSV.open(File.join(OUT_DIR, "arima_forecast.csv"), "w") do |csv|
-  csv << ['date', 'predicted', 'lower_ci', 'upper_ci']
+  csv << ['date','predicted','lower_ci','upper_ci']
   forecast.each do |r|
     csv << [r['date'], r['mean'], r['lower_ci'], r['upper_ci']]
   end
 end
-
-# Optionally print history tail
-puts "History tail (last few observations):"
-history.each { |h| puts "#{h['date']}: #{h['value']}" }
-
 puts "Arima forecast saved to #{OUT_DIR}/arima_forecast.csv"
+
+# Insert into DB if available
+if DB
+  DB.transaction do
+    forecast.each do |r|
+      begin
+        DB[:forecasts].insert(
+          forecast_date: Date.parse(r['date']),
+          model: 'arima',
+          predicted: r['mean'].to_f,
+          lower_ci: (r['lower_ci'] ? r['lower_ci'].to_f : nil),
+          upper_ci: (r['upper_ci'] ? r['upper_ci'].to_f : nil)
+        )
+      rescue => e
+        warn "Insert failed for #{r['date']}: #{e}"
+      end
+    end
+  end
+  puts "Inserted #{forecast.length} ARIMA rows into forecasts table"
+else
+  puts "DATABASE not configured; skipping DB insert. Set DATABASE_URL or USE_DB env to enable."
+end

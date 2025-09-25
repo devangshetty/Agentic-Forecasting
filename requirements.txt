@@ -2,3 +2,5 @@ fastapi
 uvicorn[standard]
 pandas
 statsmodels
+sqlalchemy
+psycopg2-binary
