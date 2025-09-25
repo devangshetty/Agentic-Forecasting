@@ -34,13 +34,11 @@ docker compose build --pull
 docker compose up -d
 Wait for Postgres to be ready:
 
-bash
-Copy code
+
 until docker compose exec -T db pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
 Prepare and import the CSV (one-time):
 
-bash
-Copy code
+
 # create a simple 2-column CSV the DB can import
 python3 - <<'PY'
 import pandas as pd
@@ -52,17 +50,8 @@ PY
 # import into Postgres (repo is mounted at /app)
 docker compose exec -T db psql -U postgres -d forecast_db -c "\copy raw_sales(order_date, sales) FROM '/app/raw_sales_for_pg.csv' WITH CSV HEADER DELIMITER ',';"
 Run the Ruby forecast (reads DB and writes forecasts to DB):
-
-bash
-Copy code
 docker compose exec -T ruby_app bash -lc "bundle exec ruby forecast.rb"
 Run ARIMA (stores ARIMA forecasts in DB):
-
-bash
-Copy code
 docker compose exec -T ruby_app bash -lc "bundle exec ruby call_arima.rb"
 Verify forecasts:
-
-bash
-Copy code
-docker compose exec -T db psql -U postgres -d forecast_db -c "SELECT forecast_date, model
+docker compose exec -T db psql -U postgres -d forecast_db -c "SELECT forecast_date, model, predicted FROM forecasts ORDER BY created_at DESC LIMIT 20;"
